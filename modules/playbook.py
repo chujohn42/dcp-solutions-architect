@@ -18,10 +18,17 @@ use the High row as a conservative placeholder.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from modules.fit_scoring import Complexity, FitAssessment, LoyaltyPlatform, PosSetup, Risk
-from modules.growth_model import RankedLever
+from modules.fit_scoring import (
+    Complexity,
+    FitAssessment,
+    LoyaltyPlatform,
+    PosSetup,
+    Risk,
+    approach_summary,
+)
+from modules.growth_model import RankedLever, display_name
 
 PHASE_NAMES = ("Discovery", "Migration", "Launch", "Optimization")
 
@@ -40,6 +47,7 @@ class PlaybookPhase:
     weeks: int
     activities: list[str]
     exit_criteria: str
+    highlights: list[str] = field(default_factory=list)  # ≤ 2 short lines for the UI
 
     @property
     def end_week(self) -> int:
@@ -77,6 +85,35 @@ def _optimization_activities(ranked: list[RankedLever]) -> list[str]:
         f"{r.lever.driver.value}, projected +${r.incremental_monthly_sales:,.0f}/mo, "
         f"effort {r.lever.effort}/5."
         for r in ranked
+    ]
+
+
+def _highlights(assessment: FitAssessment, ranked: list[RankedLever]) -> list[list[str]]:
+    """Two short plain-language lines per phase for the on-screen cards."""
+    profile = assessment.profile
+    discover, pilot, rollout = (
+        line.split(": ", 1)[1] for line in approach_summary(profile)
+    )
+    punchh = profile.loyalty is LoyaltyPlatform.PUNCHH
+    by_impact = sorted(ranked, key=lambda r: r.incremental_monthly_sales, reverse=True)
+    if by_impact:
+        optimize = [
+            f"{'Start with' if i == 0 else 'Then'} {display_name(r.lever)} "
+            f"(about +${r.incremental_monthly_sales * 12:,.0f}/yr)."
+            for i, r in enumerate(by_impact[:2])
+        ]
+    else:
+        optimize = ["Turn on growth levers in the Growth tab to fill this in."]
+    return [
+        [
+            discover[0].upper() + discover[1:],
+            "List every order channel that must sync to Punchh."
+            if punchh
+            else "Assign an owner to each risk.",
+        ],
+        [pilot[0].upper() + pilot[1:]],
+        [rollout[0].upper() + rollout[1:], "Goal: all locations live on DCP."],
+        optimize,
     ]
 
 
@@ -119,13 +156,20 @@ def build_playbook(
     exits = [
         _discovery_exit(profile.pos_setup),
         migration_exit,
-        f"All {profile.locations:,} locations live on DCP.",
+        (
+            "All locations live on DCP."
+            if profile.locations is None
+            else f"All {profile.locations:,} locations live on DCP."
+        ),
         "Each lever measured against its projected lift; re-rank for the next cycle.",
     ]
 
+    highlights = _highlights(assessment, ranked)
     phases, week = [], 0
-    for name, weeks, acts, exit_ in zip(PHASE_NAMES, durations, activities, exits):
-        phases.append(PlaybookPhase(name, week, weeks, acts, exit_))
+    for name, weeks, acts, exit_, hl in zip(
+        PHASE_NAMES, durations, activities, exits, highlights
+    ):
+        phases.append(PlaybookPhase(name, week, weeks, acts, exit_, hl))
         week += weeks
 
     return Playbook(

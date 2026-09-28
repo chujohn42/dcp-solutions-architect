@@ -64,6 +64,31 @@ DEFAULT_LEVERS: list[Lever] = [
     Lever("Menu/UX redesign", Driver.AOV, lift_pct=3.0, effort=4),
 ]
 
+# Plain-language UI labels and descriptions, keyed by lever name.
+LEVER_INFO: dict[str, tuple[str, str]] = {
+    "Loyalty promo": (
+        "Loyalty promo",
+        "Rewards that bring existing customers back more often.",
+    ),
+    "Checkout flow optimization": (
+        "Checkout optimization",
+        "Fewer steps and faster payment, so more visitors finish their order.",
+    ),
+    "Paid marketing spend": (
+        "Paid marketing",
+        "Ads that bring more visitors to the ordering site.",
+    ),
+    "Menu/UX redesign": (
+        "Menu/UX redesign",
+        "Better photos and add-on suggestions, so people spend more per order.",
+    ),
+}
+
+
+def display_name(lever: Lever) -> str:
+    return LEVER_INFO.get(lever.name, (lever.name, ""))[0]
+
+
 # 2×2 thresholds: effort at or below LOW_EFFORT_MAX counts as low effort;
 # impact at or above the median of enabled levers counts as high impact.
 LOW_EFFORT_MAX = 2

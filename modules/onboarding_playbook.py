@@ -1,4 +1,4 @@
-"""Onboarding Playbook tab — UI only. Plan logic lives in playbook.py."""
+"""3. Rollout Plan tab — UI only. Plan logic lives in playbook.py."""
 
 import re
 
@@ -23,8 +23,8 @@ def _timeline_chart(pb: Playbook) -> alt.Chart:
         y=alt.Y("Phase:N", sort=list(PHASE_NAMES), title=None),
         tooltip=[
             alt.Tooltip("Phase:N"),
-            alt.Tooltip("Start:Q", title="Start week"),
-            alt.Tooltip("End:Q", title="End week"),
+            alt.Tooltip("Start:Q", title="Starts week"),
+            alt.Tooltip("End:Q", title="Ends week"),
             alt.Tooltip("Weeks:Q"),
         ],
     )
@@ -35,38 +35,33 @@ def _timeline_chart(pb: Playbook) -> alt.Chart:
     labels = base.mark_text(align="left", dx=6).encode(
         x="End:Q", text=alt.Text("Weeks:Q", format="d")
     )
-    return (bars + labels).properties(height=190)
-
-
-def _render_assumptions() -> None:
-    with st.expander("Timeline assumptions (weeks per phase)"):
-        rows = [
-            {"Complexity": lvl.label, **dict(zip(PHASE_NAMES, weeks)), "Total": sum(weeks)}
-            for lvl, weeks in PHASE_WEEKS.items()
-        ]
-        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-        st.caption(
-            "Rough planning durations, not benchmarks. Edit `PHASE_WEEKS` in "
-            "modules/playbook.py. Unscored stacks use the High row."
-        )
+    return (bars + labels).properties(height=170)
 
 
 def _file_name(merchant: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", merchant.lower()).strip("-") or "merchant"
-    return f"dcp-onboarding-playbook-{slug}.pdf"
+    return f"dcp-rollout-plan-{slug}.pdf"
+
+
+def _assumptions() -> None:
+    with st.expander("How long each phase takes"):
+        rows = [
+            {"Difficulty": lvl.label, **dict(zip(PHASE_NAMES, weeks)), "Total weeks": sum(weeks)}
+            for lvl, weeks in PHASE_WEEKS.items()
+        ]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        st.caption("Rough planning estimates in weeks. Harder switches take longer.")
 
 
 def render() -> None:
-    st.subheader("Onboarding Playbook")
-    st.caption(
-        "Built from the Tech Stack Fit assessment and the Growth Simulator's "
-        "prioritized levers."
-    )
-    _render_assumptions()
-
     assessment = st.session_state.get("fit_assessment")
     if assessment is None:
-        st.info("Run an assessment on the **Tech Stack Fit** tab first to generate a playbook.")
+        st.info(
+            "Start with **1. Stack Fit**: choose the merchant's POS / online ordering "
+            "setup and your rollout plan will appear here. Or click **Load example "
+            "merchant** above.",
+            icon=":material/arrow_back:",
+        )
         return
 
     pb = build_playbook(
@@ -74,43 +69,34 @@ def render() -> None:
         st.session_state.get("growth_ranked", []),
         st.session_state.get("growth_sss_pct"),
     )
+    extra = st.session_state.get("growth_extra_per_year")
 
-    st.divider()
-    head, button = st.columns([3, 1])
-    with head:
-        st.markdown(f"### {pb.merchant}")
-        st.caption(pb.stack)
+    head, button = st.columns([3, 1], vertical_alignment="center")
+    head.markdown(f"#### Rollout plan: {pb.merchant}")
     button.download_button(
         "Download as PDF",
         data=playbook_to_pdf(pb),
         file_name=_file_name(pb.merchant),
         mime="application/pdf",
         type="primary",
+        icon=":material/download:",
         width="stretch",
     )
 
     m1, m2, m3 = st.columns(3)
     m1.metric("Integration complexity", pb.complexity_label)
     m2.metric("Total timeline", f"~{pb.total_weeks} weeks")
-    m3.metric(
-        "Projected digital SSS growth",
-        "—" if pb.sss_growth_pct is None else f"{pb.sss_growth_pct:.1f}%",
-    )
+    m3.metric("Extra sales per year", "—" if extra is None else f"${extra:,.0f}")
     for note in pb.notes:
-        st.warning(note)
+        st.caption(f":material/info: {note}")
 
     st.altair_chart(_timeline_chart(pb), width="stretch")
 
     cols = st.columns(len(pb.phases))
     for col, phase in zip(cols, pb.phases):
         with col, st.container(border=True):
-            st.markdown(f"**{phase.name}**")
-            st.caption(f"Weeks {phase.start_week}–{phase.end_week} · {phase.weeks} wks")
-            for a in phase.activities:
-                st.markdown(f"- {a}")
-            st.markdown(f"**Exit:** {phase.exit_criteria}")
-
-    if pb.risks:
-        with st.expander(f"Risk register ({len(pb.risks)})"):
-            for r in pb.risks:
-                st.markdown(f"**{r.title}**: {r.detail}")
+            st.markdown(f"**{phase.name}** · {phase.weeks} wks")
+            for line in phase.highlights[:2]:
+                st.markdown(f"- {line}")
+    st.caption("The PDF includes the full detail: every step, exit criteria and risks.")
+    _assumptions()

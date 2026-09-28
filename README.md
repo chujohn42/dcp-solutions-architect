@@ -12,9 +12,9 @@ The app is organized as three tabs, one per stage of the SA workflow:
 
 | Tab | Purpose |
 | --- | --- |
-| **Tech Stack Fit** | Score integration complexity (Low/Medium/High) for the merchant's POS/ordering stack (Toast, Olo, legacy POS) and loyalty platform (Punchh), with reasoning, key migration risks and a phased approach. |
-| **Growth Simulator** | Project same-store digital sales (sessions × conversion × AOV) under toggleable growth levers with editable lift % and 1–5 effort, then rank levers by impact vs. effort. |
-| **Onboarding Playbook** | Combine both tabs into a Discovery → Migration → Launch → Optimization rollout plan with timelines scaled to complexity, exportable to PDF. |
+| **1. Stack Fit** | Pick the merchant's POS/ordering setup (Toast, Olo, older POS) and loyalty program (Punchh). Get one difficulty rating (Low/Medium/High/Not scored) with a one-sentence reason, the top 2 risks and a 3-step approach. Updates instantly. |
+| **2. Growth** | Enter monthly online orders, average order value and conversion rate, then switch on growth levers. See estimated extra sales per year and a bar chart of each lever's impact. Lift % can be adjusted in a collapsed panel. |
+| **3. Rollout Plan** | Combines tabs 1 and 2 into a Discovery → Migration → Launch → Optimization timeline, scaled to the difficulty rating. Downloads as a detailed PDF. |
 
 **Status:** all three tabs are built. The playbook uses the other two tabs' outputs and
 exports to PDF.
@@ -49,8 +49,7 @@ logic stays out of the entry point.
 ## Demo
 
 Click **Load example merchant** (top right) to fill in all three tabs with a fictional
-85-location fast-casual chain on Olo + Punchh. The Tech Stack Fit result, Growth
-Simulator and Onboarding Playbook populate at once. **Reset** clears everything.
+fast-casual chain on Olo + Punchh. All three tabs populate at once. **Reset** clears everything.
 Theme and fonts are in `.streamlit/config.toml`; extra CSS is in `modules/styles.py`.
 
 ## Getting started

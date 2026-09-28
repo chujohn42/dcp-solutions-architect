@@ -54,8 +54,8 @@ class MerchantProfile:
     name: str
     pos_setup: PosSetup
     loyalty: LoyaltyPlatform
-    annual_digital_orders: int
-    locations: int
+    annual_digital_orders: int | None = None
+    locations: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +149,7 @@ def score_complexity(pos_setup: PosSetup, loyalty: LoyaltyPlatform) -> Complexit
 class Risk:
     title: str
     detail: str
+    short: str = ""  # one plain-language line for the UI
 
 
 @dataclass(frozen=True)
@@ -163,8 +164,8 @@ class FitAssessment:
     score: ComplexityScore
     risks: list[Risk]
     phases: list[Phase]
-    orders_per_day: float
-    orders_per_location_per_year: float
+    orders_per_day: float | None
+    orders_per_location_per_year: float | None
 
 
 def _write_back_channels(pos_setup: PosSetup) -> str:
@@ -176,7 +177,7 @@ def _write_back_channels(pos_setup: PosSetup) -> str:
     return ", ".join(channels)
 
 
-def identify_risks(profile: MerchantProfile, orders_per_day: float) -> list[Risk]:
+def identify_risks(profile: MerchantProfile, orders_per_day: float | None) -> list[Risk]:
     risks: list[Risk] = []
     pos = profile.pos_setup
 
@@ -187,12 +188,14 @@ def identify_risks(profile: MerchantProfile, orders_per_day: float) -> list[Risk
                 "Toast bundles POS, payments, hardware and its own online ordering. "
                 "If DCP replaces Toast's ordering surface instead of adding a channel, "
                 "that's a vendor lock-in and commercial problem, not an API problem.",
+                short="Replacing Toast's own online ordering is a business decision with Toast, not just a tech task.",
             ),
             Risk(
                 "Additive vs. replacement not yet decided",
                 "Reading from Toast's REST API (OAuth 2.0) is low-complexity, so the "
                 "technical work isn't what's holding things up; scoping depends on "
                 "the positioning decision.",
+                short="Decide first: add DCP as an extra ordering channel, or replace Toast's ordering?",
             ),
         ]
     elif pos is PosSetup.OLO:
@@ -202,6 +205,7 @@ def identify_risks(profile: MerchantProfile, orders_per_day: float) -> list[Risk
                 "Olo's Ordering API is the closest architectural analog to DCP. The "
                 "POS-abstraction problem is already solved, so the real question is "
                 "whether DCP runs alongside Olo or replaces it.",
+                short="Decide first: run DCP alongside Olo, or replace Olo?",
             ),
             Risk(
                 "Responsibilities currently owned by Rails and Omnivore",
@@ -209,6 +213,7 @@ def identify_risks(profile: MerchantProfile, orders_per_day: float) -> list[Risk
                 "(menu, modifier and tax mapping); Omnivore/OloCloud abstracts the "
                 "POS behind one REST layer. Replacement means those responsibilities "
                 "need a new owner; coexistence means deciding which path DCP orders take.",
+                short="Olo currently translates marketplace orders and menus for the POS; replacing Olo means rebuilding that.",
             ),
         ]
     elif pos is PosSetup.LEGACY:
@@ -217,15 +222,22 @@ def identify_risks(profile: MerchantProfile, orders_per_day: float) -> list[Risk
                 "No abstraction layer",
                 "With no Olo/Omnivore-style middleware in place, DCP integration work "
                 "falls close to POS-level (Aloha, Micros, PAR Brink).",
+                short="There's no middleware (a translation layer), so DCP has to connect to the POS directly.",
             ),
         ]
-        if profile.locations > 1:
+        if profile.locations is None or profile.locations > 1:
+            which = (
+                "all locations"
+                if profile.locations is None
+                else f"all {profile.locations:,} locations"
+            )
             risks.append(
                 Risk(
                     "Mixed POS across locations",
-                    f"Confirm all {profile.locations:,} locations run the same POS. "
+                    f"Confirm {which} run the same POS. "
                     "Without middleware, each distinct POS system is its own "
                     "POS-level integration.",
+                    short="Each different POS brand across locations is a separate integration.",
                 )
             )
     else:
@@ -234,6 +246,7 @@ def identify_risks(profile: MerchantProfile, orders_per_day: float) -> list[Risk
                 "Unscored stack",
                 "This stack isn't covered by the research behind the scoring. Treat "
                 "integration effort as unknown until discovery maps it.",
+                short="This setup isn't covered by our research, so the effort is unknown until discovery.",
             )
         )
 
@@ -243,12 +256,18 @@ def identify_risks(profile: MerchantProfile, orders_per_day: float) -> list[Risk
                 "Bidirectional loyalty sync",
                 "Every order from every channel must write back to Punchh for points "
                 f"and redemption to work: {_write_back_channels(pos)}.",
+                short="Every order, from every channel, must sync to Punchh for points and rewards to work.",
             ),
             Risk(
                 "Checkout failure surface",
                 "Punchh adds a distinct failure point at checkout regardless of POS. "
-                f"At this volume that's roughly {orders_per_day:,.0f} digital orders "
-                "per day, each depending on a loyalty write-back.",
+                + (
+                    f"At this volume that's roughly {orders_per_day:,.0f} digital orders "
+                    "per day, each depending on a loyalty write-back."
+                    if orders_per_day is not None
+                    else "Every digital order depends on a loyalty write-back."
+                ),
+                short="If Punchh is slow or down, checkout can fail.",
             ),
         ]
     elif profile.loyalty is LoyaltyPlatform.OTHER:
@@ -257,6 +276,7 @@ def identify_risks(profile: MerchantProfile, orders_per_day: float) -> list[Risk
                 "Unknown loyalty sync requirements",
                 "Confirm whether the loyalty platform needs real-time order write-back "
                 "from every channel. If it does, it carries the same checkout risk as Punchh.",
+                short="Check whether the loyalty program needs every order synced in real time.",
             )
         )
 
@@ -269,6 +289,8 @@ def recommend_phases(profile: MerchantProfile) -> list[Phase]:
     pilot_scope = (
         "the single location"
         if profile.locations == 1
+        else "a few pilot locations"
+        if profile.locations is None
         else f"a small subset of the {profile.locations:,} locations"
     )
 
@@ -348,8 +370,13 @@ def recommend_phases(profile: MerchantProfile) -> list[Phase]:
 
 def assess_fit(profile: MerchantProfile) -> FitAssessment:
     """Full structured assessment: complexity score, risks, phased approach."""
-    orders_per_day = profile.annual_digital_orders / 365
-    per_location = profile.annual_digital_orders / max(profile.locations, 1)
+    orders = profile.annual_digital_orders
+    orders_per_day = orders / 365 if orders is not None else None
+    per_location = (
+        orders / max(profile.locations, 1)
+        if orders is not None and profile.locations is not None
+        else None
+    )
     return FitAssessment(
         profile=profile,
         score=score_complexity(profile.pos_setup, profile.loyalty),
@@ -358,3 +385,86 @@ def assess_fit(profile: MerchantProfile) -> FitAssessment:
         orders_per_day=orders_per_day,
         orders_per_location_per_year=per_location,
     )
+
+
+# ---------------------------------------------------------------------------
+# Plain-language summaries for the simplified UI (presentation only; they
+# read the score, they don't change it)
+# ---------------------------------------------------------------------------
+
+_STACK_REASON = {
+    PosSetup.TOAST: "Toast's API is easy to connect to, but DCP may replace Toast's own "
+    "online ordering, which is a business decision",
+    PosSetup.OLO: "Olo already works a lot like DCP, so the real question is whether to "
+    "run both or replace Olo",
+    PosSetup.LEGACY: "there's no middleware (a translation layer), so DCP has to connect "
+    "to the POS directly",
+}
+
+
+def plain_reason(score: ComplexityScore, pos_setup: PosSetup, loyalty: LoyaltyPlatform) -> str:
+    """One plain-English sentence explaining the score."""
+    if score.level is None:
+        return (
+            "This setup isn't covered by the scoring research, so start with discovery "
+            "and re-score."
+        )
+    reason = _STACK_REASON[pos_setup]
+    if loyalty is LoyaltyPlatform.PUNCHH:
+        if score.capped:
+            reason += (
+                ", and Punchh loyalty adds more risk because every order must sync "
+                "points in real time (already at the top level)"
+            )
+        else:
+            reason += (
+                ", and Punchh loyalty bumps it up a level because every order must "
+                "sync points in real time"
+            )
+    return reason[0].upper() + reason[1:] + "."
+
+
+def top_risks(assessment: FitAssessment, n: int = 2) -> list[Risk]:
+    """Up to n risks, taking the stack's lead risk and the loyalty lead risk first."""
+    loyalty_titles = {
+        "Bidirectional loyalty sync",
+        "Checkout failure surface",
+        "Unknown loyalty sync requirements",
+    }
+    stack = [r for r in assessment.risks if r.title not in loyalty_titles]
+    loyalty = [r for r in assessment.risks if r.title in loyalty_titles]
+    picked = stack[:1] + loyalty[:1]
+    picked += [r for r in assessment.risks if r not in picked]
+    return picked[:n]
+
+
+def approach_summary(profile: MerchantProfile) -> list[str]:
+    """Three one-line phases: discover, pilot, roll out."""
+    pos = profile.pos_setup
+    if pos is PosSetup.TOAST:
+        lines = [
+            "Discover: decide whether DCP is an extra channel or replaces Toast's ordering.",
+            "Pilot: launch DCP as an extra channel at a few locations.",
+            "Roll out: expand, and retire Toast ordering only once DCP matches it.",
+        ]
+    elif pos is PosSetup.OLO:
+        lines = [
+            "Discover: decide whether DCP runs alongside Olo or replaces it.",
+            "Pilot: run DCP at a few locations and check that menus, options and tax match.",
+            "Roll out: expand; if replacing Olo, move its order routing over first.",
+        ]
+    elif pos is PosSetup.LEGACY:
+        lines = [
+            "Discover: list which POS system each location uses.",
+            "Pilot: build the direct POS connection at a few locations on one POS.",
+            "Roll out: one POS system at a time.",
+        ]
+    else:
+        lines = [
+            "Discover: identify the POS and ordering setup, then re-score.",
+            "Pilot: hold until the setup is scored.",
+            "Roll out: plan after re-scoring.",
+        ]
+    if profile.loyalty is LoyaltyPlatform.PUNCHH:
+        lines[1] = lines[1][:-1] + ", and confirm Punchh points and rewards work."
+    return lines

@@ -1,4 +1,4 @@
-"""Tech Stack Fit tab — UI only. All scoring logic lives in fit_scoring.py."""
+"""1. Stack Fit tab — UI only. All scoring logic lives in fit_scoring.py."""
 
 import pandas as pd
 import streamlit as st
@@ -6,124 +6,109 @@ import streamlit as st
 from modules.fit_scoring import (
     BASE_COMPLEXITY,
     PUNCHH_TIER_BUMP,
-    FitAssessment,
     LoyaltyPlatform,
     MerchantProfile,
     PosSetup,
+    approach_summary,
     assess_fit,
+    plain_reason,
+    top_risks,
 )
-from modules.styles import score_card
+from modules.styles import result_card
+
+POS_LABELS = {
+    PosSetup.TOAST.value: "Toast (register + online ordering)",
+    PosSetup.OLO.value: "Olo (online ordering platform)",
+    PosSetup.LEGACY.value: "Older POS only (Aloha, Micros, PAR Brink)",
+    PosSetup.OTHER.value: "Other / not sure",
+}
+LOYALTY_LABELS = {
+    LoyaltyPlatform.PUNCHH.value: "Punchh",
+    LoyaltyPlatform.OTHER.value: "Another loyalty program",
+    LoyaltyPlatform.NONE.value: "No loyalty program",
+}
 
 
-def _input_form() -> MerchantProfile | None:
-    with st.form("fit_inputs", border=True):
-        name = st.text_input(
-            "Merchant name", key="fit_name", placeholder="e.g. Harvest Lane Kitchen"
-        )
-        c1, c2 = st.columns(2)
-        pos = c1.selectbox(
-            "Current POS / ordering setup", [p.value for p in PosSetup], key="fit_pos"
-        )
-        loyalty = c2.selectbox(
-            "Loyalty platform", [l.value for l in LoyaltyPlatform], key="fit_loyalty"
-        )
-        c3, c4 = st.columns(2)
-        orders = c3.number_input(
-            "Annual digital order volume", min_value=0, step=10_000, key="fit_orders"
-        )
-        locations = c4.number_input(
-            "Number of locations", min_value=1, step=1, key="fit_locations"
-        )
-        submitted = st.form_submit_button(
-            "Assess fit", type="primary", icon=":material/fact_check:"
-        )
-
-    if not submitted:
-        return None
-    return MerchantProfile(
-        name=name.strip() or "Unnamed merchant",
-        pos_setup=PosSetup(pos),
-        loyalty=LoyaltyPlatform(loyalty),
-        annual_digital_orders=int(orders),
-        locations=int(locations),
+def _inputs() -> None:
+    c1, c2, c3 = st.columns([1.1, 1.3, 1])
+    c1.text_input("Merchant name", key="fit_name", placeholder="e.g. Harvest Lane Kitchen")
+    c2.selectbox(
+        "POS / online ordering setup",
+        list(POS_LABELS),
+        format_func=POS_LABELS.get,
+        key="fit_pos",
+        placeholder="Choose one…",
+        help="POS (point of sale) is the restaurant's register system.",
+    )
+    c3.selectbox(
+        "Loyalty program",
+        list(LOYALTY_LABELS),
+        format_func=LOYALTY_LABELS.get,
+        key="fit_loyalty",
     )
 
 
-def _render_assessment(a: FitAssessment) -> None:
-    st.divider()
-    st.markdown(f"### Fit assessment: {a.profile.name}")
-    st.caption(f"{a.profile.pos_setup.value} · Loyalty: {a.profile.loyalty.value}")
-
-    # 1. Complexity score
-    score = a.score
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if score.level is None:
-            score_card("Integration complexity", "Not scored", "none", "Needs discovery")
-        else:
-            score_card(
-                "Integration complexity",
-                score.level.label,
-                score.level.name.lower(),
-                "Capped at High, with Punchh risk on top" if score.capped else "",
-            )
-    c2.metric("Digital orders / day", f"{a.orders_per_day:,.0f}")
-    c3.metric("Orders / location / year", f"{a.orders_per_location_per_year:,.0f}")
-
-    for line in score.reasoning:
-        st.markdown(f"- {line}")
-
-    # 2. Risks
-    st.markdown("#### Key migration risks")
-    for risk in a.risks:
-        with st.container(border=True):
-            st.markdown(f"**{risk.title}**")
-            st.write(risk.detail)
-
-    # 3. Phased approach
-    st.markdown("#### Recommended phased approach")
-    cols = st.columns(len(a.phases))
-    for col, phase in zip(cols, a.phases):
-        with col, st.container(border=True):
-            st.markdown(f"**{phase.name}**")
-            for step in phase.steps:
-                st.markdown(f"- {step}")
-
-
-def _render_scoring_table() -> None:
-    with st.expander("Scoring table used"):
+def _scoring_table() -> None:
+    with st.expander("How the score works"):
         rows = [
-            {"Current stack": pos.value, "Complexity": lvl.label, "Reasoning": why}
+            {"Current setup": POS_LABELS[pos.value], "Difficulty": lvl.label, "Why": why}
             for pos, (lvl, why) in BASE_COMPLEXITY.items()
         ]
         rows.append(
             {
-                "Current stack": "Any stack + live Punchh loyalty",
-                "Complexity": f"+{PUNCHH_TIER_BUMP} tier",
-                "Reasoning": "Real-time bidirectional loyalty sync adds checkout-level risk",
+                "Current setup": "Any setup + Punchh loyalty",
+                "Difficulty": f"+{PUNCHH_TIER_BUMP} level (max High)",
+                "Why": "Every order must sync loyalty points in real time, which adds "
+                "risk at checkout",
             }
         )
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-        st.caption(
-            "Order volume and location count don't change the score. They size the "
-            "pilot and the loyalty write-back load. Stacks marked 'Other' go to "
-            "discovery and aren't given a guessed tier."
-        )
+        st.caption("Setups marked 'Other / not sure' aren't scored; they need discovery first.")
 
 
 def render() -> None:
-    st.subheader("Tech Stack Fit Assessment")
     st.caption(
-        "Map a merchant's current POS, ordering, and loyalty stack to DCP "
-        "integration complexity, migration risks, and a phased plan."
+        "Tell us what the merchant uses today. We'll rate how hard switching to "
+        "DCP (DoorDash Commerce Platform) would be."
     )
-    _render_scoring_table()
+    _inputs()
 
-    profile = _input_form()
-    if profile is not None:
-        st.session_state["fit_assessment"] = assess_fit(profile)
+    ss = st.session_state
+    if ss["fit_pos"] is None:
+        ss.pop("fit_assessment", None)
+        st.info("Choose the merchant's POS / online ordering setup to see the result.")
+        _scoring_table()
+        return
 
-    # Form widgets only commit on submit, so the stored assessment always
-    # matches the last submitted inputs.
-    if "fit_assessment" in st.session_state:
-        _render_assessment(st.session_state["fit_assessment"])
+    # Annual volume comes from the Growth tab (monthly × 12); it only affects
+    # wording in the PDF, never the score.
+    a = assess_fit(
+        MerchantProfile(
+            name=ss["fit_name"].strip() or "Your merchant",
+            pos_setup=PosSetup(ss["fit_pos"]),
+            loyalty=LoyaltyPlatform(ss["fit_loyalty"]),
+            annual_digital_orders=int(ss["growth_orders"]) * 12,
+        )
+    )
+    ss["fit_assessment"] = a
+
+    score = a.score
+    result_card(
+        "How hard is the switch to DCP?",
+        "Not scored" if score.level is None else score.level.label,
+        plain_reason(score, a.profile.pos_setup, a.profile.loyalty),
+        level="none" if score.level is None else score.level.name.lower(),
+    )
+
+    left, right = st.columns(2, gap="large")
+    with left:
+        st.markdown("**Top 2 risks**")
+        for r in top_risks(a):
+            st.markdown(f"- {r.short}")
+    with right:
+        st.markdown("**Recommended approach**")
+        for i, line in enumerate(approach_summary(a.profile), start=1):
+            phase, text = line.split(": ", 1)
+            st.markdown(f"{i}. **{phase}:** {text}")
+
+    _scoring_table()
