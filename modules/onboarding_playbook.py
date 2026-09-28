@@ -64,12 +64,13 @@ def render() -> None:
         )
         return
 
+    extra = st.session_state.get("growth_extra_per_year")
     pb = build_playbook(
         assessment,
         st.session_state.get("growth_ranked", []),
         st.session_state.get("growth_sss_pct"),
+        extra,
     )
-    extra = st.session_state.get("growth_extra_per_year")
 
     head, button = st.columns([3, 1], vertical_alignment="center")
     head.markdown(f"#### Rollout plan: {pb.merchant}")

@@ -8,9 +8,9 @@ import streamlit as st
 
 from modules.growth_model import (
     DEFAULT_LEVERS,
+    DRIVER_PLAIN,
     LEVER_INFO,
     Baseline,
-    Driver,
     Lever,
     baseline_projection,
     display_name,
@@ -22,11 +22,6 @@ from modules.growth_model import (
 from modules.styles import result_card
 
 BAR_COLOR = "#2a78d6"
-DRIVER_PLAIN = {
-    Driver.TRAFFIC: "more visitors",
-    Driver.CONVERSION: "more visitors ordering",
-    Driver.AOV: "bigger orders",
-}
 
 
 def _baseline_inputs() -> Baseline:

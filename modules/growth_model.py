@@ -85,6 +85,14 @@ LEVER_INFO: dict[str, tuple[str, str]] = {
 }
 
 
+# How each driver reads in plain English.
+DRIVER_PLAIN: dict[Driver, str] = {
+    Driver.TRAFFIC: "more visitors",
+    Driver.CONVERSION: "more visitors ordering",
+    Driver.AOV: "bigger orders",
+}
+
+
 def display_name(lever: Lever) -> str:
     return LEVER_INFO.get(lever.name, (lever.name, ""))[0]
 

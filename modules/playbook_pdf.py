@@ -28,19 +28,23 @@ def playbook_to_pdf(pb: Playbook) -> bytes:
     doc = SimpleDocTemplate(
         buf, pagesize=LETTER, leftMargin=0.7 * inch, rightMargin=0.7 * inch,
         topMargin=0.7 * inch, bottomMargin=0.7 * inch,
-        title=f"DCP Onboarding Playbook — {pb.merchant}",
+        title=f"DCP Rollout Plan — {pb.merchant}",
     )
     styles = getSampleStyleSheet()
     body, small = styles["BodyText"], styles["BodyText"].clone("small", fontSize=8.5, leading=11)
     story = [
-        Paragraph(_t(f"DCP Onboarding Playbook: {pb.merchant}"), styles["Title"]),
+        Paragraph(_t(f"DCP Rollout Plan: {pb.merchant}"), styles["Title"]),
         Paragraph(_t(pb.stack), body),
     ]
 
     summary = f"<b>Integration complexity:</b> {_t(pb.complexity_label)} &nbsp;&nbsp; " \
               f"<b>Total timeline:</b> ~{pb.total_weeks} weeks"
-    if pb.sss_growth_pct is not None:
-        summary += f" &nbsp;&nbsp; <b>Projected digital SSS growth:</b> {pb.sss_growth_pct:.1f}%"
+    if pb.extra_sales_per_year is not None:
+        summary += f" &nbsp;&nbsp; <b>Extra sales per year:</b> ${pb.extra_sales_per_year:,.0f}"
+        if pb.sss_growth_pct is not None:
+            summary += f" (+{pb.sss_growth_pct:.1f}%)"
+    elif pb.sss_growth_pct is not None:
+        summary += f" &nbsp;&nbsp; <b>Sales growth:</b> +{pb.sss_growth_pct:.1f}%"
     story += [Spacer(1, 6), Paragraph(summary, body)]
     for note in pb.notes:
         story.append(Paragraph(f"<i>{_t(note)}</i>", small))

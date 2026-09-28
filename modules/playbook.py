@@ -28,7 +28,7 @@ from modules.fit_scoring import (
     Risk,
     approach_summary,
 )
-from modules.growth_model import RankedLever, display_name
+from modules.growth_model import DRIVER_PLAIN, RankedLever, display_name
 
 PHASE_NAMES = ("Discovery", "Migration", "Launch", "Optimization")
 
@@ -63,6 +63,7 @@ class Playbook:
     risks: list[Risk]
     notes: list[str]
     sss_growth_pct: float | None
+    extra_sales_per_year: float | None = None
 
     @property
     def total_weeks(self) -> int:
@@ -77,14 +78,18 @@ def _discovery_exit(pos: PosSetup) -> str:
     }.get(pos, "Stack identified and re-scored.")
 
 
+def _by_impact(ranked: list[RankedLever]) -> list[RankedLever]:
+    """Levers ordered by extra sales, biggest first (same order as the Growth tab)."""
+    return sorted(ranked, key=lambda r: r.incremental_monthly_sales, reverse=True)
+
+
 def _optimization_activities(ranked: list[RankedLever]) -> list[str]:
     if not ranked:
-        return ["No growth levers enabled in the Growth Simulator."]
+        return ["No growth levers turned on in the Growth tab."]
     return [
-        f"Priority {r.rank}: {r.lever.name} ({r.quadrant}). +{r.lever.lift_pct:g}% "
-        f"{r.lever.driver.value}, projected +${r.incremental_monthly_sales:,.0f}/mo, "
-        f"effort {r.lever.effort}/5."
-        for r in ranked
+        f"Priority {i}: {display_name(r.lever)}. +{r.lever.lift_pct:g}% "
+        f"{DRIVER_PLAIN[r.lever.driver]}, about +${r.incremental_monthly_sales * 12:,.0f}/yr."
+        for i, r in enumerate(_by_impact(ranked), start=1)
     ]
 
 
@@ -95,7 +100,7 @@ def _highlights(assessment: FitAssessment, ranked: list[RankedLever]) -> list[li
         line.split(": ", 1)[1] for line in approach_summary(profile)
     )
     punchh = profile.loyalty is LoyaltyPlatform.PUNCHH
-    by_impact = sorted(ranked, key=lambda r: r.incremental_monthly_sales, reverse=True)
+    by_impact = _by_impact(ranked)
     if by_impact:
         optimize = [
             f"{'Start with' if i == 0 else 'Then'} {display_name(r.lever)} "
@@ -121,6 +126,7 @@ def build_playbook(
     assessment: FitAssessment,
     ranked: list[RankedLever],
     sss_growth_pct: float | None = None,
+    extra_sales_per_year: float | None = None,
 ) -> Playbook:
     profile = assessment.profile
     score = assessment.score
@@ -180,4 +186,5 @@ def build_playbook(
         risks=assessment.risks,
         notes=notes,
         sss_growth_pct=sss_growth_pct,
+        extra_sales_per_year=extra_sales_per_year,
     )
