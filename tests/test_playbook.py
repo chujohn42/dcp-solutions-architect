@@ -1,12 +1,12 @@
 import pytest
 
 from modules.fit_scoring import LoyaltyPlatform, MerchantProfile, PosSetup, assess_fit
-from modules.growth_model import DEFAULT_LEVERS, Baseline, display_name, prioritize
+from modules.growth_model import DEFAULT_LEVERS, Baseline, display_name, rank_by_impact
 from modules.playbook import PHASE_NAMES, PHASE_WEEKS, build_playbook
 from modules.playbook_pdf import playbook_to_pdf
 from modules.fit_scoring import Complexity
 
-RANKED = prioritize(Baseline(40_000, 28.0, 0.04), DEFAULT_LEVERS)
+RANKED = rank_by_impact(Baseline(40_000, 28.0, 0.04), DEFAULT_LEVERS)
 
 
 def _pb(pos, loyalty=LoyaltyPlatform.NONE, locations=20):
@@ -52,8 +52,6 @@ def test_optimization_lists_levers_in_rank_order():
     opt = _pb(PosSetup.TOAST).phases[-1].activities
     biggest = max(RANKED, key=lambda r: r.incremental_monthly_sales)
     assert opt[0].startswith(f"Priority 1: {display_name(biggest.lever)}")
-    # Matches the Growth tab: ordered by impact alone, no effort or 2×2 labels.
-    assert not any("effort" in line or "Quick win" in line for line in opt)
     assert len(opt) == len(RANKED)
 
 
@@ -72,16 +70,3 @@ def test_pdf_renders_with_special_characters():
     pdf = playbook_to_pdf(build_playbook(assess_fit(profile), RANKED, 12.0))
     assert pdf.startswith(b"%PDF")
 
-
-def test_optimization_ignores_effort():
-    from modules.growth_model import Driver, Lever
-
-    levers = [
-        Lever("Menu/UX redesign", Driver.AOV, 20, effort=5),  # biggest, hardest
-        Lever("Loyalty promo", Driver.TRAFFIC, 5, effort=1),  # 10k / 1 beats 40k / 5
-    ]
-    ranked = prioritize(Baseline(10_000, 20.0, 0.05), levers)
-    assert ranked[0].lever.name == "Loyalty promo"  # effort-weighted model ranking
-    profile = MerchantProfile("X", PosSetup.TOAST, LoyaltyPlatform.NONE, 1_000, 1)
-    opt = build_playbook(assess_fit(profile), ranked).phases[-1].activities
-    assert opt[0].startswith("Priority 1: Menu/UX redesign")

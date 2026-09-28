@@ -15,8 +15,8 @@ from modules.growth_model import (
     baseline_projection,
     display_name,
     isolated_impact,
-    prioritize,
     project,
+    rank_by_impact,
     sss_growth_pct,
 )
 from modules.styles import result_card
@@ -99,7 +99,7 @@ def render() -> None:
 
     # Shared with the Rollout Plan tab (rendered after this one).
     ss = st.session_state
-    ss["growth_ranked"] = prioritize(baseline, levers)
+    ss["growth_ranked"] = rank_by_impact(baseline, levers)
     ss["growth_sss_pct"] = growth_pct
     ss["growth_extra_per_year"] = extra_per_year
 

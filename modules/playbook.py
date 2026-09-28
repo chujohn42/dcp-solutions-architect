@@ -9,7 +9,7 @@ Mapping:
 - Discovery    ← fit Phase 1 (discovery & decision) + owning each risk
 - Migration    ← fit Phase 2 (pilot build and validation)
 - Launch       ← fit Phase 3 (rollout)
-- Optimization ← enabled growth levers, in prioritized order
+- Optimization ← enabled growth levers, biggest impact first
 
 Phase durations come from PHASE_WEEKS, keyed by complexity. They are rough
 planning assumptions, shown in the UI, not derived from data. Unscored stacks
@@ -78,18 +78,13 @@ def _discovery_exit(pos: PosSetup) -> str:
     }.get(pos, "Stack identified and re-scored.")
 
 
-def _by_impact(ranked: list[RankedLever]) -> list[RankedLever]:
-    """Levers ordered by extra sales, biggest first (same order as the Growth tab)."""
-    return sorted(ranked, key=lambda r: r.incremental_monthly_sales, reverse=True)
-
-
 def _optimization_activities(ranked: list[RankedLever]) -> list[str]:
     if not ranked:
         return ["No growth levers turned on in the Growth tab."]
     return [
-        f"Priority {i}: {display_name(r.lever)}. +{r.lever.lift_pct:g}% "
+        f"Priority {r.rank}: {display_name(r.lever)}. +{r.lever.lift_pct:g}% "
         f"{DRIVER_PLAIN[r.lever.driver]}, about +${r.incremental_monthly_sales * 12:,.0f}/yr."
-        for i, r in enumerate(_by_impact(ranked), start=1)
+        for r in ranked
     ]
 
 
@@ -100,12 +95,11 @@ def _highlights(assessment: FitAssessment, ranked: list[RankedLever]) -> list[li
         line.split(": ", 1)[1] for line in approach_summary(profile)
     )
     punchh = profile.loyalty is LoyaltyPlatform.PUNCHH
-    by_impact = _by_impact(ranked)
-    if by_impact:
+    if ranked:
         optimize = [
             f"{'Start with' if i == 0 else 'Then'} {display_name(r.lever)} "
             f"(about +${r.incremental_monthly_sales * 12:,.0f}/yr)."
-            for i, r in enumerate(by_impact[:2])
+            for i, r in enumerate(ranked[:2])
         ]
     else:
         optimize = ["Turn on growth levers in the Growth tab to fill this in."]

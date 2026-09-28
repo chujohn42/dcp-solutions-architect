@@ -15,9 +15,7 @@ Two views of impact:
   ranking. Isolated impacts don't sum exactly to the combined total because
   lifts on different drivers multiply.
 
-Prioritization: rank enabled levers by incremental monthly sales per effort
-point (effort is a user-editable 1–5 score). Each lever also gets a 2×2 label
-using the visible thresholds below.
+Ranking: enabled levers are ordered by their isolated impact, biggest first.
 
 Every number here is an assumption the user can edit in the UI; DEFAULT_LEVERS
 is only a starting point, not a benchmark.
@@ -25,7 +23,6 @@ is only a starting point, not a benchmark.
 
 from __future__ import annotations
 
-import statistics
 from dataclasses import dataclass, replace
 from enum import Enum
 
@@ -52,16 +49,15 @@ class Lever:
     name: str
     driver: Driver
     lift_pct: float
-    effort: int  # 1 (easy) – 5 (hard)
     enabled: bool = True
 
 
 # Placeholder assumptions: visible and editable in the UI, meant to be replaced.
 DEFAULT_LEVERS: list[Lever] = [
-    Lever("Loyalty promo", Driver.TRAFFIC, lift_pct=5.0, effort=2),
-    Lever("Checkout flow optimization", Driver.CONVERSION, lift_pct=4.0, effort=3),
-    Lever("Paid marketing spend", Driver.TRAFFIC, lift_pct=8.0, effort=2),
-    Lever("Menu/UX redesign", Driver.AOV, lift_pct=3.0, effort=4),
+    Lever("Loyalty promo", Driver.TRAFFIC, lift_pct=5.0),
+    Lever("Checkout flow optimization", Driver.CONVERSION, lift_pct=4.0),
+    Lever("Paid marketing spend", Driver.TRAFFIC, lift_pct=8.0),
+    Lever("Menu/UX redesign", Driver.AOV, lift_pct=3.0),
 ]
 
 # Plain-language UI labels and descriptions, keyed by lever name.
@@ -95,11 +91,6 @@ DRIVER_PLAIN: dict[Driver, str] = {
 
 def display_name(lever: Lever) -> str:
     return LEVER_INFO.get(lever.name, (lever.name, ""))[0]
-
-
-# 2×2 thresholds: effort at or below LOW_EFFORT_MAX counts as low effort;
-# impact at or above the median of enabled levers counts as high impact.
-LOW_EFFORT_MAX = 2
 
 
 @dataclass(frozen=True)
@@ -153,44 +144,13 @@ class RankedLever:
     rank: int
     lever: Lever
     incremental_monthly_sales: float
-    impact_per_effort: float
-    quadrant: str
 
 
-def _quadrant(high_impact: bool, low_effort: bool) -> str:
-    if high_impact and low_effort:
-        return "Quick win"
-    if high_impact:
-        return "Big bet"
-    if low_effort:
-        return "Fill-in"
-    return "Deprioritize"
-
-
-def prioritize(baseline: Baseline, levers: list[Lever]) -> list[RankedLever]:
-    """Rank enabled levers by impact per effort point (ties: higher impact first)."""
-    enabled = [l for l in levers if l.enabled]
-    if not enabled:
-        return []
-
-    impacts = {l.name: isolated_impact(baseline, l) for l in enabled}
-    median_impact = statistics.median(impacts.values())
-
-    ordered = sorted(
-        enabled,
-        key=lambda l: (impacts[l.name] / l.effort, impacts[l.name]),
-        reverse=True,
-    )
+def rank_by_impact(baseline: Baseline, levers: list[Lever]) -> list[RankedLever]:
+    """Enabled levers ordered by extra sales when applied alone, biggest first."""
+    impacts = [(l, isolated_impact(baseline, l)) for l in levers if l.enabled]
+    impacts.sort(key=lambda pair: pair[1], reverse=True)
     return [
-        RankedLever(
-            rank=i,
-            lever=l,
-            incremental_monthly_sales=impacts[l.name],
-            impact_per_effort=impacts[l.name] / l.effort,
-            quadrant=_quadrant(
-                high_impact=impacts[l.name] >= median_impact,
-                low_effort=l.effort <= LOW_EFFORT_MAX,
-            ),
-        )
-        for i, l in enumerate(ordered, start=1)
+        RankedLever(rank=i, lever=l, incremental_monthly_sales=impact)
+        for i, (l, impact) in enumerate(impacts, start=1)
     ]

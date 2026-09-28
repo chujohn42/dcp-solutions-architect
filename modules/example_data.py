@@ -21,8 +21,8 @@ EXAMPLE_BASELINE = {
 
 # Same order and names as growth_model.DEFAULT_LEVERS.
 EXAMPLE_LEVERS = [
-    Lever("Loyalty promo", Driver.TRAFFIC, lift_pct=6.0, effort=2),
-    Lever("Checkout flow optimization", Driver.CONVERSION, lift_pct=5.0, effort=3),
-    Lever("Paid marketing spend", Driver.TRAFFIC, lift_pct=7.0, effort=2),
-    Lever("Menu/UX redesign", Driver.AOV, lift_pct=4.0, effort=4),
+    Lever("Loyalty promo", Driver.TRAFFIC, lift_pct=6.0),
+    Lever("Checkout flow optimization", Driver.CONVERSION, lift_pct=5.0),
+    Lever("Paid marketing spend", Driver.TRAFFIC, lift_pct=7.0),
+    Lever("Menu/UX redesign", Driver.AOV, lift_pct=4.0),
 ]
